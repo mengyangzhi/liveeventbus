@@ -1,0 +1,141 @@
+plugins {
+    alias(libs.plugins.androidLibrary)
+    alias(libs.plugins.jetbrainsKotlinAndroid)
+    id 'maven-publish'
+}
+
+static def getGitLatestTag() {
+    try {
+        // See https://www.jianshu.com/p/2ecfd791c464
+        def cmd = 'git describe --tags --always'
+        return cmd.execute().text.trim() ?: '0.1.0'
+    } catch (ignored) {
+        return "0.0.0"
+    }
+}
+//项目相关信息
+def pomLibGroupName = 'com.thkj.liveeventbus'
+def pomLibArtifactId = rootProject.name
+def pomLibVersion = getGitLatestTag()
+def pomLibDescription = "TODO description: ${rootProject.name} for Android"
+def pomSiteUrl = "https://gitee.com/zym2/${rootProject.name}"
+def pomLicenses = ["Apache License 2.0", "Mulan PSL v2"]
+//开发者信息
+def pomDeveloperId = ''
+def pomDeveloperName = ''
+def pomDeveloperEmail = ''
+
+// 配置maven-publish插件的相关部分
+afterEvaluate {
+    publishing {
+        repositories {
+            maven {
+                // 执行命令`gradlew publishReleasePublicationToLocalRepository`
+                name = 'Local'
+                // 可同步到`https://gitee.com/li_yu_jiang/maven-repo`，通过`https://gitee.com/li_yu_jiang/maven-repo/raw/master`访问
+                url = rootProject.file("归档")
+            }
+
+        }
+        publications {
+            release(MavenPublication) {
+                try {
+                    // Require `android.publishing.singleVariant('release')` in `build.gradle`
+                    from this.components.release
+                } catch (e) {
+                    e.printStackTrace()
+                }
+                group = pomLibGroupName
+                version = "1.0.0"
+                description = pomLibDescription
+                artifactId = pomLibArtifactId
+
+                println("我是第一行 group-->" + group + " description " + description + " version " + version + " artifactId " + artifactId + " pomLibArtifactId " + pomLibArtifactId + " pomLibVersion " + pomLibVersion)
+                pom.withXml {
+                    def root = asNode()
+                    root.appendNode('name', pomLibArtifactId)
+                    root.appendNode('description', pomLibDescription)
+                    root.appendNode('url', pomSiteUrl)
+                    root.appendNode('licenses').appendNode('license').appendNode('name', pomLicenses[0])
+                    def developer = root.appendNode('developers').appendNode('developer')
+                    developer.appendNode('id', pomDeveloperId)
+                    developer.appendNode('name', pomDeveloperName)
+                    developer.appendNode('email', pomDeveloperEmail)
+                    // Define this explicitly if using implementation or api configurations
+                    def dependenciesNode = root['dependencies'][0] ?: root.appendNode('dependencies')
+                    def addDependency = {
+                        // Ensure dependencies such as fileTree are not included.
+                        println("group-->" + it.group + " name " + it.name + " version " + it.version)
+                        if (it.group && it.name && it.version) {
+                            def dependencyNode = dependenciesNode.appendNode('dependency')
+                            //唯一标识
+                            dependencyNode.appendNode('groupId', it.group)
+                            //项目名称
+                            dependencyNode.appendNode('artifactId', it.name)
+                            if (it.group == pomLibGroupName && it.version == 'unspecified') {
+                                println("group2222-->" + it.group + " name " + it.name + " version " + it.version)
+                                //版本号
+                                dependencyNode.appendNode('version', it.version)
+                            } else {
+                                println("group333-->" + it.group + " name " + it.name + " version " + it.version)
+                                dependencyNode.appendNode('version', it.version)
+                            }
+                            if (it.hasProperty('optional') && it.optional) {
+                                println("group444-->" + it.group + " name " + it.name + " version " + it.version)
+                                dependencyNode.appendNode('optional', 'true')
+                            }
+                        }
+                    }
+                    // Iterate over the implementation dependencies (we don't want the test ones), adding a <dependency> node for each
+                    configurations.implementation.allDependencies.each addDependency
+                    configurations.api.allDependencies.each addDependency
+                }
+            }
+        }
+
+/*    repositories {
+        // 配置发布到的Maven仓库
+        maven {
+            url 'your_maven_repo_url'
+            credentials {
+                // 用户名和密码配置（如果需要的话）
+            }
+        }
+    }*/
+    }
+}
+android {
+    namespace 'com.thkj.liveeventbus'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation libs.androidx.core.ktx
+    implementation libs.appcompat
+//    implementation libs.material
+    implementation libs.lifecycle.extensions
+    implementation libs.androidx.lifecycle.lifecycle.livedata
+    testImplementation libs.junit
+    androidTestImplementation libs.ext.junit
+    androidTestImplementation libs.espresso.core
+}
