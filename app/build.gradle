@@ -4,20 +4,26 @@ plugins {
     id 'maven-publish'
 }
 
-
+//打包main目录下代码和资源的 task
+tasks.register('androidSourcesJar', Jar) {
+    classifier = 'sources'
+    from android.sourceSets.main.java.srcDirs
+}
 afterEvaluate {
     publishing {
         publications {
             // Creates a Maven publication called "release".
             release(MavenPublication) {
                 from components.release
-                groupId = 'com.gitee.zym2'
+                groupId = 'com.github.mengyangzhi'
                 artifactId = 'live-event-bus-x'
                 version = '1.8.5'
             }
         }
     }
 }
+
+
 
 android {
     namespace 'com.thkj.liveeventbus'
