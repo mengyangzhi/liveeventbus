@@ -84,7 +84,9 @@ public final class AppUtils {
      * @return the context of Application object
      */
     public static Application getApp() {
-        if (sApplication != null) return sApplication;
+        if (sApplication != null) {
+            return sApplication;
+        }
         Application app = getApplicationByReflect();
         init(app);
         return app;
@@ -131,9 +133,13 @@ public final class AppUtils {
 
     static boolean isAppForeground() {
         ActivityManager am = (ActivityManager) AppUtils.getApp().getSystemService(Context.ACTIVITY_SERVICE);
-        if (am == null) return false;
+        if (am == null) {
+            return false;
+        }
         List<ActivityManager.RunningAppProcessInfo> info = am.getRunningAppProcesses();
-        if (info == null || info.size() == 0) return false;
+        if (info == null || info.isEmpty()) {
+            return false;
+        }
         for (ActivityManager.RunningAppProcessInfo aInfo : info) {
             if (aInfo.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) {
                 return aInfo.processName.equals(AppUtils.getApp().getPackageName());
@@ -230,28 +236,38 @@ public final class AppUtils {
         }
 
         void removeOnActivityDestroyedListener(final Activity activity) {
-            if (activity == null) return;
+            if (activity == null) {
+                return;
+            }
             mDestroyedListenerMap.remove(activity);
         }
 
         void addOnActivityDestroyedListener(final Activity activity,
                                             final OnActivityDestroyedListener listener) {
-            if (activity == null || listener == null) return;
+            if (activity == null || listener == null) {
+                return;
+            }
             Set<OnActivityDestroyedListener> listeners;
             if (!mDestroyedListenerMap.containsKey(activity)) {
                 listeners = new HashSet<>();
                 mDestroyedListenerMap.put(activity, listeners);
             } else {
                 listeners = mDestroyedListenerMap.get(activity);
-                if (listeners.contains(listener)) return;
+                if (listeners.contains(listener)) {
+                    return;
+                }
             }
             listeners.add(listener);
         }
 
         private void postStatus(final boolean isForeground) {
-            if (mStatusListenerMap.isEmpty()) return;
+            if (mStatusListenerMap.isEmpty()) {
+                return;
+            }
             for (OnAppStatusChangedListener onAppStatusChangedListener : mStatusListenerMap.values()) {
-                if (onAppStatusChangedListener == null) return;
+                if (onAppStatusChangedListener == null) {
+                    return;
+                }
                 if (isForeground) {
                     onAppStatusChangedListener.onForeground();
                 } else {
@@ -261,7 +277,9 @@ public final class AppUtils {
         }
 
         private void setTopActivity(final Activity activity) {
-            if (PERMISSION_ACTIVITY_CLASS_NAME.equals(activity.getClass().getName())) return;
+            if (PERMISSION_ACTIVITY_CLASS_NAME.equals(activity.getClass().getName())) {
+                return;
+            }
             if (mActivityList.contains(activity)) {
                 if (!mActivityList.getLast().equals(activity)) {
                     mActivityList.remove(activity);
@@ -295,7 +313,9 @@ public final class AppUtils {
                 Field mActivityListField = activityThreadClass.getDeclaredField("mActivityList");
                 mActivityListField.setAccessible(true);
                 Map activities = (Map) mActivityListField.get(currentActivityThreadMethod);
-                if (activities == null) return null;
+                if (activities == null) {
+                    return null;
+                }
                 for (Object activityRecord : activities.values()) {
                     Class activityRecordClass = activityRecord.getClass();
                     Field pausedField = activityRecordClass.getDeclaredField("paused");
@@ -321,21 +341,28 @@ public final class AppUtils {
         }
 
         private static void fixSoftInputLeaks(final Activity activity) {
-            if (activity == null) return;
+            if (activity == null) {
+                return;
+            }
             InputMethodManager imm =
                     (InputMethodManager) AppUtils.getApp().getSystemService(Context.INPUT_METHOD_SERVICE);
-            if (imm == null) return;
+            if (imm == null) {
+                return;
+            }
             String[] leakViews = new String[]{"mLastSrvView", "mCurRootView", "mServedView", "mNextServedView"};
             for (String leakView : leakViews) {
                 try {
                     Field leakViewField = InputMethodManager.class.getDeclaredField(leakView);
-                    if (leakViewField == null) continue;
+                    if (leakViewField == null) {
+                        continue;
+                    }
                     if (!leakViewField.isAccessible()) {
                         leakViewField.setAccessible(true);
                     }
                     Object obj = leakViewField.get(imm);
-                    if (!(obj instanceof View)) continue;
-                    View view = (View) obj;
+                    if (!(obj instanceof View view)) {
+                        continue;
+                    }
                     if (view.getRootView() == activity.getWindow().getDecorView().getRootView()) {
                         leakViewField.set(imm, null);
                     }

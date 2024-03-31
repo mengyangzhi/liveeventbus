@@ -1,5 +1,7 @@
 package com.thkj.liveeventbus.core;
 
+import static android.content.Context.RECEIVER_EXPORTED;
+
 import android.app.Application;
 import android.content.Context;
 import android.content.Intent;
@@ -11,12 +13,13 @@ import android.os.Looper;
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.lifecycle.ExternalLiveData;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.Observer;
 
-import com.thkj.liveeventbus.androidx.ExternalLiveData;
+
 import com.thkj.liveeventbus.ipc.consts.IpcConst;
 import com.thkj.liveeventbus.ipc.core.ProcessorManager;
 import com.thkj.liveeventbus.ipc.receiver.LebIpcReceiver;
@@ -30,7 +33,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.logging.Level;
 
 /**
@@ -54,7 +56,6 @@ public final class LiveEventBusCore {
      * 存放LiveEvent
      */
     private final Map<String, LiveEvent<Object>> bus;
-    private boolean isFirstObserveCall = true;
 
     /**
      * 可配置的项
@@ -62,13 +63,13 @@ public final class LiveEventBusCore {
     private final Config config = new Config();
     private boolean lifecycleObserverAlwaysActive;
     private boolean autoClear;
-    private final LoggerManager logger;
+    private LoggerManager logger;
     private final Map<String, ObservableConfig> observableConfigs;
 
     /**
      * 跨进程通信
      */
-    private final LebIpcReceiver receiver;
+    private LebIpcReceiver receiver;
     private boolean isRegisterReceiver = false;
 
     /**
@@ -150,7 +151,7 @@ public final class LiveEventBusCore {
         @NonNull
         private final String key;
         private final LifecycleLiveData<T> liveData;
-        private final Map<Observer<T>, ObserverWrapper<T>> observerMap = new HashMap<>();
+        private final Map<Observer, ObserverWrapper<T>> observerMap = new HashMap<>();
         private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
         LiveEvent(@NonNull String key) {
@@ -271,8 +272,7 @@ public final class LiveEventBusCore {
          * @param observer 观察者
          */
         @Override
-        public void observe(@NonNull final LifecycleOwner owner,
-                            @NonNull final Observer<T> observer) {
+        public void observe(@NonNull final LifecycleOwner owner, @NonNull final Observer<T> observer) {
             if (ThreadUtils.isMainThread()) {
                 observeInternal(owner, observer);
             } else {
@@ -293,8 +293,7 @@ public final class LiveEventBusCore {
          * @param observer 观察者
          */
         @Override
-        public void observeSticky(@NonNull final LifecycleOwner owner,
-                                  @NonNull final Observer<T> observer) {
+        public void observeSticky(@NonNull final LifecycleOwner owner, @NonNull final Observer<T> observer) {
             if (ThreadUtils.isMainThread()) {
                 observeStickyInternal(owner, observer);
             } else {
@@ -377,8 +376,7 @@ public final class LiveEventBusCore {
                     " with key: " + key);
             Application application = AppUtils.getApp();
             if (application == null) {
-                logger.log(Level.WARNING, "application is null, you can try setContext() when " +
-                        "config");
+                logger.log(Level.WARNING, "application is null, you can try setContext() when config");
                 return;
             }
             Intent intent = new Intent(IpcConst.ACTION);
@@ -402,33 +400,28 @@ public final class LiveEventBusCore {
         @MainThread
         private void observeInternal(@NonNull LifecycleOwner owner, @NonNull Observer<T> observer) {
             ObserverWrapper<T> observerWrapper = new ObserverWrapper<>(observer);
-            observerWrapper.preventNextEvent = isFirstObserveCall;
+            observerWrapper.preventNextEvent = liveData.getVersion() > ExternalLiveData.START_VERSION;
             liveData.observe(owner, observerWrapper);
-            isFirstObserveCall=false;
             logger.log(Level.INFO, "observe observer: " + observerWrapper + "(" + observer + ")"
                     + " on owner: " + owner + " with key: " + key);
         }
 
         @MainThread
-        private void observeStickyInternal(@NonNull LifecycleOwner owner,
-                                           @NonNull Observer<T> observer) {
+        private void observeStickyInternal(@NonNull LifecycleOwner owner, @NonNull Observer<T> observer) {
             ObserverWrapper<T> observerWrapper = new ObserverWrapper<>(observer);
             liveData.observe(owner, observerWrapper);
-            logger.log(Level.INFO,
-                    "observe sticky observer: " + observerWrapper + "(" + observer + ")"
-                            + " on owner: " + owner + " with key: " + key);
+            logger.log(Level.INFO, "observe sticky observer: " + observerWrapper + "(" + observer + ")"
+                    + " on owner: " + owner + " with key: " + key);
         }
 
         @MainThread
         private void observeForeverInternal(@NonNull Observer<T> observer) {
             ObserverWrapper<T> observerWrapper = new ObserverWrapper<>(observer);
-            observerWrapper.preventNextEvent = isFirstObserveCall;
+            observerWrapper.preventNextEvent = liveData.getVersion() > ExternalLiveData.START_VERSION;
             observerMap.put(observer, observerWrapper);
-            isFirstObserveCall = false;
             liveData.observeForever(observerWrapper);
-            logger.log(Level.INFO,
-                    "observe forever observer: " + observerWrapper + "(" + observer + ")"
-                            + " with key: " + key);
+            logger.log(Level.INFO, "observe forever observer: " + observerWrapper + "(" + observer + ")"
+                    + " with key: " + key);
         }
 
         @MainThread
@@ -436,9 +429,8 @@ public final class LiveEventBusCore {
             ObserverWrapper<T> observerWrapper = new ObserverWrapper<>(observer);
             observerMap.put(observer, observerWrapper);
             liveData.observeForever(observerWrapper);
-            logger.log(Level.INFO,
-                    "observe sticky forever observer: " + observerWrapper + "(" + observer + ")"
-                            + " with key: " + key);
+            logger.log(Level.INFO, "observe sticky forever observer: " + observerWrapper + "(" + observer + ")"
+                    + " with key: " + key);
         }
 
         @MainThread
@@ -449,9 +441,7 @@ public final class LiveEventBusCore {
             } else {
                 realObserver = observer;
             }
-            if (realObserver != null) {
-                liveData.removeObserver(realObserver);
-            }
+            liveData.removeObserver(realObserver);
         }
 
         private class LifecycleLiveData<T> extends ExternalLiveData<T> {
@@ -462,11 +452,9 @@ public final class LiveEventBusCore {
                 this.key = key;
             }
 
-            @NonNull
             @Override
             protected Lifecycle.State observerActiveLevel() {
-                return lifecycleObserverAlwaysActive() ? Lifecycle.State.CREATED :
-                        Lifecycle.State.STARTED;
+                return lifecycleObserverAlwaysActive() ? Lifecycle.State.CREATED : Lifecycle.State.STARTED;
             }
 
             @Override
@@ -481,7 +469,7 @@ public final class LiveEventBusCore {
             private boolean lifecycleObserverAlwaysActive() {
                 if (observableConfigs.containsKey(key)) {
                     ObservableConfig config = observableConfigs.get(key);
-                    if (config != null && config.lifecycleObserverAlwaysActive != null) {
+                    if (config.lifecycleObserverAlwaysActive != null) {
                         return config.lifecycleObserverAlwaysActive;
                     }
                 }
@@ -491,7 +479,7 @@ public final class LiveEventBusCore {
             private boolean autoClear() {
                 if (observableConfigs.containsKey(key)) {
                     ObservableConfig config = observableConfigs.get(key);
-                    if (config != null && config.autoClear != null) {
+                    if (config.autoClear != null) {
                         return config.autoClear;
                     }
                 }
@@ -548,7 +536,6 @@ public final class LiveEventBusCore {
                 preventNextEvent = false;
                 return;
             }
-            isFirstObserveCall=true;
             logger.log(Level.INFO, "message received: " + t);
             try {
                 observer.onChanged(t);
@@ -586,8 +573,8 @@ public final class LiveEventBusCore {
             StringBuilder sb = new StringBuilder();
             for (String key : bus.keySet()) {
                 sb.append("Event name: " + key).append("\n");
-                ExternalLiveData liveData = Objects.requireNonNull(bus.get(key)).liveData;
-                sb.append("\tversion: " + liveData.getValue()).append("\n");
+                ExternalLiveData liveData = bus.get(key).liveData;
+                sb.append("\tversion: " + liveData.getVersion()).append("\n");
                 sb.append("\thasActiveObservers: " + liveData.hasActiveObservers()).append("\n");
                 sb.append("\thasObservers: " + liveData.hasObservers()).append("\n");
                 sb.append("\tActiveCount: " + getActiveCount(liveData)).append("\n");
